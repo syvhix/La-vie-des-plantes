@@ -541,7 +541,7 @@ trait Admin {
 						    'key'         => 'section-particles',
 						    'title'       => __( 'Particles', 'essential-addons-for-elementor-lite' ),
 						    'demo_link'   => 'https://essential-addons.com/particle-effect/',
-						    'doc_link'    => 'https://essential-addons.com/docs/particles/',
+						    'doc_link'    => 'https://essential-addons.com/docs/ea-particles/',
 						    'is_pro'      => true,
 						    'is_activate' => boolval( $this->get_settings( 'section-particles' ) )
 					    ],
@@ -596,14 +596,6 @@ trait Admin {
 						    'is_pro'      => false,
 						    'promotion'   => 'popular',
 						    'is_activate' => boolval( $this->get_settings( 'custom-js' ) )
-					    ],
-					    'xd-copy'               => [
-						    'key'         => 'xd-copy',
-						    'title'       => __( 'Cross-Domain Copy Paste', 'essential-addons-for-elementor-lite' ),
-						    'demo_link'   => 'https://essential-addons.com/cross-domain-copy-paste/',
-						    'doc_link'    => 'https://essential-addons.com/docs/cross-domain-copy-paste/',
-						    'is_pro'      => true,
-						    'is_activate' => boolval( $this->get_settings( 'xd-copy' ) )
 					    ],
 					    'scroll-to-top'         => [
 						    'key'         => 'scroll-to-top',

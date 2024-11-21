@@ -333,6 +333,7 @@ class Post_Timeline extends Widget_Base
                 ],
                 'selectors' => [
                     '{{WRAPPER}} .eael-timeline-post-title .eael-timeline-post-title-text' => 'text-align: {{VALUE}};',
+                    '{{WRAPPER}} .eael-timeline-post-title .eael-timeline-post-title-text-card' => 'text-align: {{VALUE}};',
                 ],
             ]
         );
@@ -346,6 +347,7 @@ class Post_Timeline extends Widget_Base
                     'default' => Global_Typography::TYPOGRAPHY_PRIMARY,
                 ],
                 'selector' => '{{WRAPPER}} .eael-timeline-post-title .eael-timeline-post-title-text',
+                'selector' => '{{WRAPPER}} .eael-timeline-post-title .eael-timeline-post-title-text-card',
             ]
         );
 
@@ -765,8 +767,8 @@ class Post_Timeline extends Widget_Base
             ]
         );
 
-        echo '<div ' . $this->get_render_attribute_string('eael_post_timeline_wrapper') . '>
-            <div ' . $this->get_render_attribute_string('eael_post_timeline') . '>';
+        echo '<div '; $this->print_render_attribute_string('eael_post_timeline_wrapper'); echo '>
+            <div '; $this->print_render_attribute_string('eael_post_timeline'); echo '>';
 
                 $template = $this->get_template($this->get_settings('eael_dynamic_template_Layout'));
                 $settings['loadable_file_name'] = $this->get_filename_only($template);
@@ -785,11 +787,11 @@ class Post_Timeline extends Widget_Base
                             include($template);
                         }
                     } else {
-                        _e('<p class="no-posts-found">No posts found!</p>', 'essential-addons-for-elementor-lite');
+                        echo '<p class="no-posts-found">' . esc_html__( 'No posts found!', 'essential-addons-for-elementor-lite' ) . '</p>';
                     }
                     wp_reset_postdata();
                 } else {
-                    _e('<p class="no-posts-found">No layout found!</p>', 'essential-addons-for-elementor-lite');
+                    echo '<p class="no-posts-found">' . esc_html__( 'No layout found!', 'essential-addons-for-elementor-lite' ) . '</p>';
                 }
 		    echo '</div>
 		</div>';
