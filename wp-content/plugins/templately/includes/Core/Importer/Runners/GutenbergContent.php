@@ -37,11 +37,19 @@ class GutenbergContent extends BaseRunner {
 	}
 
 	public function import( $data, $imported_data ): array {
-		$results  = [];
+		$results  = $data["imported_data"]["content"] ?? [];
 		$contents = $this->manifest['content'];
 		$path     = $this->dir_path . 'content' . DIRECTORY_SEPARATOR;
 
-		if(isset($this->manifest['has_settings']) && $this->manifest['has_settings']){
+		$processed_templates = $this->origin->get_progress();
+
+		if(empty($processed_templates)){
+			$this->log( 0 );
+			$processed_templates = ["__started__"];
+			$this->origin->update_progress( $processed_templates);
+		}
+
+		if(isset($this->manifest['has_settings']) && $this->manifest['has_settings'] && !in_array("global_colors", $processed_templates)){
 			$file     = $this->dir_path . "settings.json";
 			$settings = Utils::read_json_file( $file );
 
@@ -78,6 +86,9 @@ class GutenbergContent extends BaseRunner {
 
 			// Save the settings to the 'eb_global_styles' option
 			Utils::update_option('eb_global_styles', $settings);
+
+			$processed_templates[] = "global_colors";
+			$this->origin->update_progress( $processed_templates, [ 'content' => $results ]);
 		}
 
 		$processed = 0;
@@ -87,19 +98,40 @@ class GutenbergContent extends BaseRunner {
 
 		foreach ( $contents as $type => $posts ) {
 			foreach ( $posts as $id => $settings ) {
+				if (in_array("$type::$id", $processed_templates)) {
+					continue;
+				}
 				$import = $this->import_page_content( $id, $type, $path, $settings );
 
 				if ( ! $import ) {
 					$results[ $type ]['failed'][ $id ] = $import;
 				} else {
-					Utils::import_page_settings( $import, $settings );
-					$results[ $type ]['succeed'][ $id ] = $import;
+					Utils::import_page_settings( $import['id'], $settings );
+					$results[ $type ]['succeed'][ $id ] = $import['id'];
 				}
 
 				// Broadcast Log
-				$processed += 1;
+				$processed = 0;
+				array_walk_recursive($results, function($item) use (&$processed) {
+					$processed++;
+				});
 				$progress   = floor( ( 100 * $processed ) / $total );
 				$this->log( $progress, null, 'eventLog' );
+
+
+				$results['__attachments'][$type][ $id ] = isset($import['__attachments']) ? $import['__attachments'] : [];
+				// Add the template to the processed templates and update the session data
+				$processed_templates[] = "$type::$id";
+				$this->origin->update_progress( $processed_templates, [ 'content' => $results ]);
+				// If it's not the last item, send the SSE message and exit
+				if( end($contents) !== $posts || end($posts) !== $settings) {
+					$this->sse_message( [
+						'type'    => 'continue',
+						'action'  => 'continue',
+						'results' => __METHOD__ . '::' . __LINE__,
+					] );
+					exit;
+				}
 			}
 		}
 
@@ -143,15 +175,13 @@ class GutenbergContent extends BaseRunner {
 
 				$attachments = $this->json->parse_images($json_content['content']);
 
+				$result = [];
 				if (!empty($attachments)) {
-					$manifest_content = &$this->manifest['content'][$type][$id];
-					if(!isset($manifest_content['__attachments'])){
-						$manifest_content['__attachments'] = [];
-					}
-					$manifest_content['__attachments'] = $attachments;
+					$result['__attachments'] = $attachments;
 				}
+				$result['id'] = $inserted;
 
-				return $inserted;
+				return $result;
 			}
 		} catch ( \Exception $e ) {
 			return false;

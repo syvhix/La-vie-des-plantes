@@ -33,21 +33,37 @@ class Templates extends BaseRunner {
 	 * @throws Exception
 	 */
 	public function import( $data, $imported_data ): array {
-		$results   = [];
+		$results  = $data["imported_data"]["templates"] ?? [];
 		$templates = $this->manifest['templates'];
 		$path      = $this->dir_path . 'templates' . DIRECTORY_SEPARATOR;
 
 		$_extra_pages = [];
 
+		// Get the processed templates from the session data
+		$processed_templates = $this->origin->get_progress();
+
+		if(empty($processed_templates)){
+			$this->log( 0 );
+			$processed_templates = ["__started__"];
+			$this->origin->update_progress( $processed_templates);
+			$this->create_page_template();
+		}
+
 		$total     = count( $templates );
-		$processed = 0;
-		$this->create_page_template();
+
+
 		foreach ( $templates as $id => $template_settings ) {
+			// Broadcast Log
+			// If the template has been processed, skip it
+			if (in_array($id, $processed_templates)) {
+				continue;
+			}
+
 			$template_content = Utils::read_json_file( $path . $id . '.json' );
 
 			$import = $this->import_template( $id, $template_settings, $template_content );
 			if ( $import ) {
-				$results['succeed'][ $id ]   = $import;
+				$results['succeed'][ $id ]   = $import['id'];
 				$results['template_types'][] = $template_settings['type'];
 
 				if ( $template_settings['type'] === 'archive' || $template_settings['type'] === 'product_archive' || $template_settings['type'] === 'course_archive' ) {
@@ -56,7 +72,7 @@ class Templates extends BaseRunner {
 						$_extra_pages['archive_settings'] = [
 							'old_id'     => $id,
 							'page_id'    => $page_id,
-							'archive_id' => $import
+							'archive_id' => $import['id']
 						];
 					}
 				}
@@ -66,9 +82,28 @@ class Templates extends BaseRunner {
 			}
 
 			// Broadcast Log
-			$processed += 1;
+			$processed = 0;
+			array_walk_recursive($results, function($item) use (&$processed) {
+				$processed++;
+			});
 			$progress  = floor( ( 100 * $processed ) / $total );
 			$this->log( $progress );
+
+			$results['__attachments'][ $id ] = isset($import['__attachments']) ? $import['__attachments'] : [];
+			// Add the template to the processed templates and update the session data
+			$processed_templates[] = $id;
+			$this->origin->update_progress( $processed_templates, array_merge( [ 'templates' => $results ], $_extra_pages ));
+
+			// If it's not the last item, send the SSE message and exit
+			if( end($templates) !== $template_settings ) {
+				$this->sse_message( [
+					'type'    => 'continue',
+					'action'  => 'continue',
+					'i'       => $id,
+					'results' => __METHOD__ . '::' . __LINE__,
+				] );
+				exit;
+			}
 		}
 
 		return array_merge( [ 'templates' => $results ], $_extra_pages );
@@ -88,6 +123,7 @@ class Templates extends BaseRunner {
 		];
 
 		$meta = [];
+		$result = [];
 
 		if ( $this->manifest['platform'] == 'gutenberg' ) {
 			$meta['_wp_page_template'] = PageTemplates::TEMPLATE_HEADER_FOOTER;
@@ -102,11 +138,12 @@ class Templates extends BaseRunner {
 			$attachments = $this->json->parse_images($template_content['content']);
 
 			if (!empty($attachments)) {
-				$manifest_content = &$this->manifest['templates'][$id];
-				if(!isset($manifest_content['__attachments'])){
-					$manifest_content['__attachments'] = [];
-				}
-				$manifest_content['__attachments'] = $attachments;
+				$result['__attachments'] = $attachments;
+				// $manifest_content = &$this->manifest['templates'][$id];
+				// if(!isset($manifest_content['__attachments'])){
+				// 	$manifest_content['__attachments'] = [];
+				// }
+				// $manifest_content['__attachments'] = $attachments;
 			}
 		}
 
@@ -118,8 +155,8 @@ class Templates extends BaseRunner {
 		if($template->has_logo($template_content)){
 			$this->manifest['templates'][$id]['has_logo'] = true;
 		}
-
-		return $template->get_main_id();
+		$result['id'] = $template->get_main_id();
+		return $result;
 	}
 
 

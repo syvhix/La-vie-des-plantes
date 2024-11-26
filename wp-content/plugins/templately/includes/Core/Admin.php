@@ -37,6 +37,8 @@ class Admin extends Base {
 
 		add_filter( 'plugin_action_links_' . TEMPLATELY_PLUGIN_BASENAME, [$this, 'handleActionLinks'], 10, 2 );
 
+		add_action( 'admin_footer', [$this, 'my_custom_footer_html'] );
+
 		// Remove OLD notice from 1.0.0 (if other WPDeveloper plugin has notice)
 		NoticeRemover::get_instance( '1.0.0' );
 	}
@@ -94,7 +96,26 @@ class Admin extends Base {
 	 * @return void
 	 */
 	public function scripts( string $hook ) {
-		if ( ! in_array( $hook, [ 'edit.php', 'toplevel_page_templately', 'elementor', 'gutenberg' ], true ) ) {
+		if ( ! in_array( $hook, [ 'index.php', 'edit.php', 'toplevel_page_templately', 'elementor', 'gutenberg' ], true ) ) {
+			return;
+		}
+
+		if('index.php' === $hook){
+			// need separate condition so we can return if page is index.php
+
+			$is_complete = get_user_meta(get_current_user_id(), 'templately_fsi_complete', true);
+			if($is_complete && $is_complete !== 'done' && !wp_is_mobile()){
+				$user  = Options::get_instance()->get('user');
+				$email = isset($user['email']) ? $user['email'] : '';
+
+				templately()->assets->enqueue( 'templately', 'css/dashboard-style.css', [] );
+				templately()->assets->enqueue( 'templately', 'js/dashboard.js', [], true );
+				templately()->assets->localize( 'templately', 'templately', [
+					'email' => $email,
+					'nonce' => wp_create_nonce( 'templately_nonce' ),
+				] );
+
+			}
 			return;
 		}
 
@@ -169,19 +190,20 @@ class Admin extends Base {
 				'profile'      => templately()->assets->icon( 'icons/profile.svg' ),
 				'warning'      => templately()->assets->icon( 'icons/warning.png' )
 			],
-			'promo_image'        => templately()->assets->icon( 'single-page-promo.png' ),
-			'default_image'      => templately()->assets->icon( 'clouds/cloud-item.svg' ),
-			'not_found'          => templately()->assets->icon( 'no-item-found.png' ),
-			'no_items'           => templately()->assets->icon( 'no-items.png' ),
-			'loadingImage'       => templately()->assets->icon( 'logos/loading-logo.gif' ),
-			'current_url'        => admin_url( 'admin.php?page=templately' ),
-			'is_signed'          => Login::is_signed(),
-			'is_globally_signed' => Login::is_globally_signed(),
-			'signed_as_global'   => Login::signed_as_global(),
-			'current_screen'     => $_current_screen,
-			'post_type' 		 => get_post_type(),
-			'has_elementor'      => rest_sanitize_boolean( is_plugin_active( 'elementor/elementor.php' ) ),
-			'has_elementor_pro'  => rest_sanitize_boolean( is_plugin_active( 'elementor-pro/elementor-pro.php' ) ),
+			'promo_image'             => templately()->assets->icon( 'single-page-promo.png' ),
+			'default_image'           => templately()->assets->icon( 'clouds/cloud-item.svg' ),
+			'not_found'               => templately()->assets->icon( 'no-item-found.png' ),
+			'no_items'                => templately()->assets->icon( 'no-items.png' ),
+			'loadingImage'            => templately()->assets->icon( 'logos/loading-logo.gif' ),
+			'current_url'             => admin_url( 'admin.php?page=templately' ),
+			'is_signed'               => Login::is_signed(),
+			'is_globally_signed'      => Login::is_globally_signed(),
+			'signed_as_global'        => Login::signed_as_global(),
+			'current_screen'          => $_current_screen,
+			'can_fsi'                 => current_user_can('install_plugins') && current_user_can('install_themes'),
+			'post_type'               => get_post_type(),
+			'has_elementor'           => rest_sanitize_boolean( is_plugin_active( 'elementor/elementor.php' ) ),
+			'has_elementor_pro'       => rest_sanitize_boolean( is_plugin_active( 'elementor-pro/elementor-pro.php' ) ),
 			'theme'                   => $_current_screen == 'templately' ? 'light' : $platform->ui_theme(),
 			'is_wp_support_gutenberg' => version_compare( get_bloginfo( 'version' ), '5.0.0', '>=' ),
 		], $templately );
@@ -199,6 +221,7 @@ class Admin extends Base {
 	 */
 	public function notices() {
 		$notices = new Notices( [
+			// 'dev_mode'       => true,
 			'id'             => 'templately',
 			'storage_key'    => 'notices',
 			'lifetime'       => 3,
@@ -280,6 +303,8 @@ class Admin extends Base {
 		}
 
 		if ( $global_user === false || isset( $global_user['plan'] ) && $global_user['plan'] == 'free' ) {
+			$crown = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m15.743 10.938.161-1.578c.086-.842.142-1.399.098-1.749h.015c.727 0 1.316-.622 1.316-1.389s-.589-1.389-1.315-1.389c-.727 0-1.316.622-1.316 1.39 0 .346.12.663.32.907-.287.186-.66.58-1.223 1.171-.434.456-.65.684-.893.72a.7.7 0 0 1-.394-.059c-.223-.104-.372-.385-.67-.95l-1.57-2.97a22 22 0 0 0-.476-.873c.569-.306.958-.93.958-1.65C10.754 1.496 9.97.667 9 .667s-1.754.829-1.754 1.852c0 .72.389 1.344.958 1.65-.139.234-.293.525-.476.873l-1.57 2.97c-.298.565-.447.846-.67.95a.7.7 0 0 1-.394.058c-.242-.035-.46-.263-.893-.719-.563-.592-.937-.985-1.223-1.171.2-.244.32-.56.32-.908 0-.767-.589-1.389-1.316-1.389-.726 0-1.315.622-1.315 1.39 0 .766.589 1.388 1.315 1.388h.016c-.045.35.012.906.098 1.749l.16 1.578c.09.876.164 1.71.255 2.46H15.49c.09-.75.165-1.584.254-2.46m-7.698 6.395h1.908c2.488 0 3.732 0 4.562-.784.362-.342.591-.959.757-1.762H2.727c.166.803.395 1.42.757 1.762.83.784 2.074.784 4.562.784" fill="#fff"/></svg>';
+
 			$notices->add( 'upsale', wp_sprintf( '<p>%1$s <a target="_blank" href="%3$s">%2$s</a>.</p>', __( '🔥 Get access to 5,000+ Ready Templates & save up to 65% OFF now', 'templately' ), __( 'Upgrade to Pro', 'templately' ), 'https://templately.com/#pricing' ), [
 				'start'       => $notices->strtotime( '+10 day' ),
 				'dismissible' => true,
@@ -297,8 +322,12 @@ class Admin extends Base {
 				]
 			] );
 
-			$notice_text = '<p style="margin-top: 0; margin-bottom: 10px;">Black Friday Sale: Save up to 70% and <strong>get access to 5000+ ready templates</strong> to design amazing websites ✨</p>
-			<a class="button button-primary" href="https://wpdeveloper.com/upgrade/templately-bfcm" target="_blank">Upgrade to pro</a> <button data-dismiss="true" class="dismiss-btn button button-link">I don’t want to save money</button>';
+			$notice_text  = '<p style="margin-top: 0; margin-bottom: 0px;"><strong>🏷️ Black Friday Special:</strong> Get Templately PRO up to 70% OFF & unlock 5500+ ready WordPress templates now.</p>';
+			$notice_text .= sprintf(
+				'<a class="button button-primary" target="_blank" href="%2$s">%1$s</a>',
+				$crown . __('Upgrade to Pro', 'templately'),
+				'https://templately.com/#pricing'
+			);
 
 			$_black_friday = [
 				'thumbnail' => templately()->assets->icon( 'logos/logo-full.svg' ),
@@ -306,11 +335,46 @@ class Admin extends Base {
 			];
 
 			$notices->add( 'black_friday', $_black_friday, [
-				'start'       => $notices->time(),
+				'start'       => $notices->strtotime('+1 minute'),
 				'recurrence'  => false,
 				'dismissible' => true,
 				'refresh'     => TEMPLATELY_VERSION,
-				"expire"      => strtotime( '11:59:59pm 2nd December, 2023' ),
+				"expire"      => strtotime( '11:59:59pm 5nd December, 2024' ),
+				'display_if'  => !wp_is_mobile(),
+				'screens'     => [
+					'dashboard',
+				],
+			] );
+
+			$halloween_text = sprintf(
+				'<p style="margin-top: 0; margin-bottom: 0px;"> 🎃 %s <strong>%s</strong> %s</p>',
+				__('Halloween Treats: Get Templately PRO', 'templately'),
+				__('up to 65% OFF', 'templately'),
+				__('& unlock 5000+ ready WordPress templates now.', 'templately')
+			);
+
+			$halloween_text .= sprintf(
+				'<a class="button button-primary" target="_blank" href="%2$s">%1$s</a>',
+				$crown . __('Upgrade to Pro', 'templately'),
+				'https://templately.com/#pricing'
+			);
+
+
+			$_halloween = [
+				'thumbnail' => templately()->assets->icon( 'logos/logo-full.svg' ),
+				'html'      => $halloween_text,
+			];
+
+			$notices->add( 'halloween', $_halloween, [
+				'start'       => $notices->strtotime('+1 minute'),
+				'recurrence'  => false,
+				'dismissible' => true,
+				'refresh'     => TEMPLATELY_VERSION,
+				"expire"      => strtotime( '11:59:59pm 3nd November, 2024' ),
+				'display_if'  => !wp_is_mobile(),
+				'screens'     => [
+					'dashboard',
+				],
 			] );
 		}
 
@@ -390,5 +454,26 @@ class Admin extends Base {
 
 		$links[] = $settingsLink;
 		return $links;
+	}
+
+
+	public function my_custom_footer_html() {
+		global $current_screen;
+
+		if ( ! $current_screen ) {
+			return false;
+		}
+
+		if($current_screen->id !== 'dashboard'){
+			return false;
+		}
+
+		$is_complete = get_user_meta(get_current_user_id(), 'templately_fsi_complete', true);
+
+		if($is_complete && $is_complete !== 'done' && !wp_is_mobile()):
+			?>
+				<div id="templately-fsi-feedback"></div>
+			<?php
+		endif;
 	}
 }

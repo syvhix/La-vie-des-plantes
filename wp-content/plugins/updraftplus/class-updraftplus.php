@@ -123,8 +123,7 @@ class UpdraftPlus {
 		}
 
 		// Create admin page
-		add_action('init', array($this, 'handle_url_actions'));
-		add_action('init', array($this, 'updraftplus_single_site_maintenance_init'));
+		add_action('init', array($this, 'initialize_required_settings'));
 		// Run earlier than default - hence earlier than other components
 		// admin_menu runs earlier, and we need it because options.php wants to use $updraftplus_admin before admin_init happens
 		add_action(apply_filters('updraft_admin_menu_hook', 'admin_menu'), array($this, 'admin_menu'), 9);
@@ -553,13 +552,24 @@ class UpdraftPlus {
 	}
 
 	/**
+	 * Initialize all settings required for the plugin to work properly
+	 */
+	public function initialize_required_settings() {
+		// Tell WordPress where to find the translations
+		load_plugin_textdomain('updraftplus', false, basename(dirname(__FILE__)).'/languages/');
+		do_action('updraftplus_load_translations_for_udcentral');
+		$this->handle_url_actions();
+		$this->updraftplus_single_site_maintenance_init();
+	}
+
+	/**
 	 * Handle actions passed on to method plugins; e.g. Google OAuth 2.0 - ?action=updraftmethod-googledrive-auth&page=updraftplus
 	 * Nov 2013: Google's new cloud console, for reasons as yet unknown, only allows you to enter a redirect_uri with a single URL parameter... thus, we put page second, and re-add it if necessary. Apr 2014: Bitcasa already do this, so perhaps it is part of the OAuth2 standard or best practice somewhere.
 	 * Also handle action=downloadlog
 	 *
 	 * @return Void - may not necessarily return at all, depending on the action
 	 */
-	public function handle_url_actions() {
+	private function handle_url_actions() {
 
 		// First, basic security check: must be an admin page, with ability to manage options, with the right parameters
 		// Also, only on GET because WordPress on the options page repeats parameters sometimes when POST-ing via the _wp_referer field
@@ -678,7 +688,7 @@ class UpdraftPlus {
 	 *
 	 * @return void
 	 */
-	public function updraftplus_single_site_maintenance_init() {
+	private function updraftplus_single_site_maintenance_init() {
 		
 		if (!is_multisite()) return;
 		
@@ -749,9 +759,6 @@ class UpdraftPlus {
 	 * Runs upon the WP action plugins_loaded
 	 */
 	public function plugins_loaded() {
-
-		// Tell WordPress where to find the translations
-		load_plugin_textdomain('updraftplus', false, basename(dirname(__FILE__)).'/languages/');
 		
 		// The Google Analyticator plugin does something horrible: loads an old version of the Google SDK on init, always - which breaks us
 		if ((defined('DOING_CRON') && DOING_CRON) || (defined('DOING_AJAX') && DOING_AJAX && isset($_REQUEST['subaction']) && 'backupnow' == $_REQUEST['subaction']) || (isset($_GET['page']) && 'updraftplus' == $_GET['page'] )) {
@@ -2676,7 +2683,14 @@ class UpdraftPlus {
 		}
 
 		$total_size = 0;
-		
+
+		$service = $this->just_one($this->jobdata_get('service'));
+		if (empty($service)) {
+			$message = 'This file has already been successfully processed';
+		} else {
+			$message = 'This file has already been successfully uploaded';
+		}
+
 		// Queue files for upload
 		foreach ($our_files as $key => $files) {
 			// Only continue if the stored info was about a dump
@@ -2697,7 +2711,7 @@ class UpdraftPlus {
 				}
 				
 				if ($this->is_uploaded($file)) {
-					$this->log("$file: $key: This file has already been successfully uploaded");
+					$this->log("$file: $key: $message");
 				} elseif (is_file($updraft_dir.'/'.$file)) {
 					if (!in_array($file, $undone_files)) {
 						$this->log("$file: $key: This file has not yet been successfully uploaded: will queue");
@@ -3310,8 +3324,12 @@ class UpdraftPlus {
 		if (!is_file($this->logfile_name)) {
 			$this->log('Failed to open log file ('.$this->logfile_name.') - you need to check your UpdraftPlus settings (your chosen directory for creating files in is not writable, or you ran out of disk space). Backup aborted.');
 			$this->log(__('Could not create files in the backup directory.', 'updraftplus').' '.__('Backup aborted - check your UpdraftPlus settings.', 'updraftplus'), 'error');
-			$final_message = __('UpdraftPlus is unable to perform backups as your backup directory is not writable or the disk space is full.', 'updraftplus').' '.__('Please check the backup directory and ensure it is writable so that backups may continue.', 'updraftplus');
-			$this->send_results_email($final_message, $this->jobdata);
+			
+			if (!defined('UPDRAFTPLUS_SEND_UNWRITABLE_BACKUP_DIRECTORY_EMAIL') || UPDRAFTPLUS_SEND_UNWRITABLE_BACKUP_DIRECTORY_EMAIL) {
+				$final_message = __('UpdraftPlus is unable to perform backups as your backup directory is not writable or the disk space is full.', 'updraftplus').' '.__('Please check the backup directory and ensure it is writable so that backups may continue.', 'updraftplus');
+				$this->send_results_email($final_message, $this->jobdata);
+			}
+			
 			return false;
 		}
 
@@ -5389,7 +5407,7 @@ class UpdraftPlus {
 					$similar_type_collate = UpdraftPlus_Manipulation_Functions::get_matching_str_from_array_elems($db_unsupported_collate_unique, array_keys($db_supported_collations), false);
 				}
 
-				$collate_select_html = '<div class="notice below-h2 updraft-restore-option"><label>'.__('Your chosen replacement collation', 'updraftplus').':</label>';
+				$collate_select_html = '<div class="udp-notice below-h2 updraft-restore-option"><label>'.__('Your chosen replacement collation', 'updraftplus').':</label>';
 				$collate_select_html .= '<select name="updraft_restorer_collate" id="updraft_restorer_collate">';
 				$db_charsets_found_unique = array_unique($db_charsets_found);
 				foreach ($db_supported_collations as $collate => $collate_info_obj) {
@@ -5510,7 +5528,7 @@ class UpdraftPlus {
 		if (empty($tables_found)) {
 			$warn[] = __('UpdraftPlus was unable to find any tables when scanning the database backup; it maybe corrupt.', 'updraftplus');
 		} else {
-			$select_restore_tables = '<div class="notice below-h2 updraft-restore-option">';
+			$select_restore_tables = '<div class="udp-notice below-h2 updraft-restore-option">';
 			$select_restore_tables .= '<p>'.__('If you do not want to restore all your database tables, then choose some to exclude here.', 'updraftplus').'(<a href="#" id="updraftplus_restore_tables_showmoreoptions">...</a>)</p>';
 
 			$select_restore_tables .= '<div class="updraftplus_restore_tables_options_container" style="display:none;">';
@@ -6386,5 +6404,39 @@ class UpdraftPlus {
 	public function get_avatar_url($url) {
 		if (preg_match('/gravatar.com/i', $url)) return UPDRAFTPLUS_URL.'/images/default-avatar.jpg';
 		return $url;
+	}
+
+	/**
+	 * Modifies the parent file value.
+	 *
+	 * This modification is necessary to prevent the active menu selection from pointing to the
+	 * old "Settings" menu and to ensure correct menu highlighting.
+	 *
+	 * @param string $parent_file The current parent file value.
+	 *
+	 * @return string The modified parent file value.
+	 */
+	public static function parent_file($parent_file) {
+		// Set the global variable 'self' and update the parent file to UpdraftPlus_Options::PARENT_FILE
+		$GLOBALS['self'] = $parent_file = UpdraftPlus_Options::PARENT_FILE;
+
+		return $parent_file;
+	}
+
+	/**
+	 * Unserialize data while maintaining compatibility across PHP versions due to different number of arguments required by PHP's "unserialize" function
+	 *
+	 * @param string        $serialized_data Data to be unserialized, should be one that is already serialized
+	 * @param boolean|array $allowed_classes Either an array of class names which should be accepted, false to accept no classes, or true to accept all classes
+	 * @param integer       $max_depth       The maximum depth of structures permitted during unserialization, and is intended to prevent stack overflows
+	 * @return mixed Unserialized data can be any of types (integer, float, boolean, string, array or object)
+	 */
+	public static function unserialize($serialized_data, $allowed_classes = false, $max_depth = 0) {
+		if (version_compare(PHP_VERSION, '7.0', '<')) {
+			$result = unserialize($serialized_data);
+		} else {
+			$result = unserialize($serialized_data, array('allowed_classes' => $allowed_classes, 'max_depth' => $max_depth)); //phpcs:ignore PHPCompatibility.FunctionUse.NewFunctionParameters.unserialize_optionsFound
+		}
+		return $result;
 	}
 }
